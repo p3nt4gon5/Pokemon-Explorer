@@ -5,6 +5,8 @@ import SearchInput from './SearchInput';
 import PokemonGrid from './PokemonGrid';
 import { usePokemonList } from '../hooks/usePokemon';
 import { Pokemon, PokemonDetail } from '../types/pokemon';
+import Fuse from 'fuse.js';
+
 
 const SearchPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,27 +23,45 @@ const SearchPage: React.FC = () => {
     return Promise.all(promises);
   };
 
+
+
+  const normalize = (input: string) =>
+  input.toLowerCase()
+       .normalize('NFD')
+       .replace(/[\u0300-\u036f]/g, '')
+       .replace(/[^a-z0-9]/g, '');
+
+
+       
   const handleSearch = async (searchTerm: string) => {
     setLoading(true);
     setHasSearched(true);
     
-    try {
-      const filtered = allPokemons
-        .filter(pokemon => 
-          pokemon.name.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-        .slice(0, 20);
-      
-      const details = await fetchPokemonDetails(filtered);
-      setSearchResults(details);
-    } catch (error) {
-      console.error('Error searching pokemons:', error);
-      setSearchResults([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const normalizedList = allPokemons.map(pokemon => ({
+      ...pokemon,
+      norm: normalize(pokemon.name),
+    }));
 
+    const fuse = new Fuse(normalizedList, {
+      keys: ['norm'],
+      includeScore: true,
+      threshold: 0.4, 
+    });
+
+    const results = fuse.search(normalize(searchTerm)).slice(0, 20);
+    const matched = results.map(r => r.item);
+
+
+    const details = await fetchPokemonDetails(matched);
+    setSearchResults(details);
+  } catch (error) {
+    console.error('Error searching pokemons:', error);
+    setSearchResults([]);
+  } finally {
+    setLoading(false);
+  }
+};
   const handlePokemonSelect = async (pokemon: Pokemon) => {
     setLoading(true);
     setHasSearched(true);
